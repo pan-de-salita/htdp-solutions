@@ -1,0 +1,13 @@
+#lang racket
+(require 2htdp/universe)
+(require 2htdp/image)
+(require test-engine/racket-tests)
+
+;; an LR (short for "launching rocket") is one of:
+;; - "resting"
+;; - NonnegativeNumber
+;; interpretation: "resting" represents a grounded rocket,
+;; while a number denotes the height of a rocket in flight.
+
+;; constant defitions
+(define ROCKET )

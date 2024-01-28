@@ -1,0 +1,86 @@
+;; sample problem 4.4.1 - design a program that simulates the descent of a UFO.
+
+;; sample problem 4.4.2 - add a status line. it says "descending" when the UFO's
+;; height is above one third of the height of the canvas. it switches to "closing
+;; in" below that. and finally, when the UFO has reached the bottom of the canvas,
+;; the status notifies the player that the UFO has "landed". you are free to use
+;; appropriate colors for the status line.
+
+#lang racket
+(require 2htdp/universe)
+(require 2htdp/image)
+(require test-engine/racket-tests)
+
+;; a WorldState is a Number.
+;; interpretation: number of pixels between the top and the UFO.
+
+(define WIDTH 300)
+(define HEIGHT 100)
+(define MTSCN (empty-scene WIDTH HEIGHT))
+(define UFO (overlay (circle (/ HEIGHT 8) "solid" "black")
+                     (rectangle (/ HEIGHT 2) (/ HEIGHT 45) "solid" "black")))
+(define CLOSE (/ HEIGHT 3))
+(define LANDED (- HEIGHT (/ (image-height UFO) 2)))
+
+;; WorldState -> WorldState
+(define (main y0)
+  (big-bang y0
+            [on-tick nxt 0.5]
+            [to-draw render]
+            [stop-when landed?]))
+
+;; WorldState -> WorldState
+;; stops program when UFO has landed
+(check-expect (landed? (add1 LANDED)) #t)
+(define (landed? y)
+  (>= y LANDED))
+
+;; WorldState -> WorldState
+;; computes next location of UFO.
+(check-expect (nxt 11) 12)
+(define (nxt y)
+  (+ y 1))
+
+;; WorldState -> String
+;; computes descent status text of UFO.
+(check-expect (descent-status 40) "closing in")
+;; (define (descent-status-text y)
+;;   (cond [(= LANDED y) "landed"]
+;;         [(>= CLOSE y) "closing in"]
+;;         [else "descending"]))
+(define (descent-status-text y)
+  (cond [(< CLOSE y) "descending"]
+        [(>= LANDED y) "landed"]
+        [else "closing in"]))
+
+;; WorldState -> String
+;; computes color of descent status text of UFO.
+(check-expect (descent-status-color 40) "black")
+(define (descent-status-color y)
+  (cond [(< CLOSE y) "darkgrey"]
+        [(>= LANDED y) "blue"]
+        [else "black"]))
+
+;; WorldState -> Image
+;; displays the descent status of UFO.
+(check-expect (descent-status 40)
+              (text "closing in"
+                    (image-height UFO)
+                    "black"))
+(define (draw-descent-status y)
+  (text (descent-status-text y)
+        (image-height UFO)
+        (descent-status-color y)))
+
+;; WorldState -> Image
+;; places UFO at given height into the center of MTSCN.
+(check-expect (render 11)
+              (place-image (above UFO (draw-descent-status 11))
+                           (/ WIDTH 2) 11
+                           MTSCN))
+(define (render y)
+  (place-image (beside (draw-descent-status y) UFO)
+               (/ WIDTH 2) y
+               MTSCN))
+
+(main 0)

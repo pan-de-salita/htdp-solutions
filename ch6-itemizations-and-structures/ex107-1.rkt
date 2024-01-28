@@ -1,0 +1,370 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-beginner-reader.ss" "lang")((modname ex107-1) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+
+(require test-engine/racket-tests)
+(require 2htdp/image)
+(require 2htdp/universe)
+(require lang/posn)
+
+;;; constants and data definitions
+
+(define CANVAS-WIDTH 450)
+(define CANVAS-HEIGHT 450)
+(define CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT "darkgrey"))
+
+(define CHAM (bitmap "./cham-0.png"))
+(define CHAM-WIDTH (image-width CHAM))
+(define CHAM-HEIGHT (image-height CHAM))
+(define CHAM-Y (+ (/ CANVAS-HEIGHT 2) CHAM-HEIGHT))
+(define CHAM-X-START (- (/ CHAM-WIDTH 2)))
+(define CHAM-RESET (+ CANVAS-WIDTH (/ CHAM-WIDTH 2)))
+(define CHAM-DEFAULT-COLOR "green")
+
+(define CAT-0 (bitmap "./cat-0.png"))
+(define CAT-1 (bitmap "./cat-1.png"))
+(define CAT-WIDTH (image-width CAT-0))
+(define CAT-HEIGHT (image-height CAT-0))
+(define CAT-Y (- (/ CANVAS-HEIGHT 2) CHAM-HEIGHT))
+(define CAT-X-START (- (/ CAT-WIDTH 2)))
+(define CAT-RESET (+ CANVAS-WIDTH (/ CAT-WIDTH 2)))
+
+(define PET-Y (/ CANVAS-HEIGHT 2))
+(define PET-VELOCITY 3)
+
+(define JOY/TICK 0.65)
+(define JOY/DOWN 2)
+(define JOY/UP 1)
+(define JOY-GAUGE-WIDTH (* CANVAS-WIDTH 0.5))
+(define JOY-GAUGE-HEIGHT (* CANVAS-HEIGHT 0.08))
+(define JOY-GAUGE-X (/ CANVAS-WIDTH 2))
+(define JOY-GAUGE-Y (- CANVAS-HEIGHT (* JOY-GAUGE-HEIGHT 1.5)))
+(define JOY-LEVEL-COLOR "black")
+(define JOY-LEVEL-HEIGHT JOY-GAUGE-HEIGHT)
+(define JOY-MAX JOY-GAUGE-WIDTH)
+(define JOY-MIN 0)
+(define JOY-GAUGE (rectangle JOY-GAUGE-WIDTH JOY-GAUGE-HEIGHT "outline" "black"))
+(define JOY-GAUGE-POSN (make-posn JOY-GAUGE-X JOY-GAUGE-Y))
+
+(define FOCUS-X JOY-GAUGE-X)
+(define FOCUS-Y (* JOY-GAUGE-HEIGHT 1.5))
+(define FOCUS-POSN (make-posn FOCUS-X FOCUS-Y))
+(define FOCUS-FONT-SIZE 30)
+(define FOCUS-FONT-COLOR "black")
+
+;; an XCor is a Number.
+;; represents the x-coordinate of a VAnimal as it walks
+;; across canvas.
+
+;; a Joy is a Number.
+;; represents the joy level of a VAnimal.
+
+;; a ChamColor is one of the following:
+;; - "red"
+;; - "green"
+;; - "blue"
+;; represents the color of the chameleon.
+
+;; a Focus is one of the following Strings:
+;; - "cham"
+;; - "cat"
+;; represents the animal a KeyEvent may affect
+;; at a given time.
+
+;; VCham is a structure:
+;;     (make-VCham XCor Joy ChamColor)
+;; (make-VCham xc j cc) describes a chameleon's:
+;; - x-coordinate
+;; - joy
+;; - color
+(define-struct VCham [x-cor color])
+
+(define VCham-test-0 (make-VCham CHAM-X-START CHAM-DEFAULT-COLOR))
+(define VCham-test-1 (make-VCham (* 1/3 CANVAS-WIDTH) "red"))
+(define VCham-test-2 (make-VCham CHAM-RESET "red"))
+
+;; VCat is a structure:
+;;      (make-VCat XCor Joy)
+;; (make-VCat xcor j) describes a cat's:
+;; - x-coordinate
+;; - joy
+(define-struct VCat [x-cor])
+
+(define VCat-test-0 (make-VCat CAT-X-START))
+(define VCat-test-1 (make-VCat (* 1/2 CANVAS-WIDTH)))
+(define VCat-test-2 (make-VCat CAT-RESET))
+
+;; Zoo is a structure:
+;;      (make-zoo VCat VCham Joy Focus)
+;; contains both VCham and VCAt at any given time.
+(define-struct zoo [VCham VCat joy focus])
+
+(define zoo-test-0 (make-zoo VCham-test-0 VCat-test-0 JOY-MAX "cham"))
+(define zoo-test-1 (make-zoo VCham-test-1 VCat-test-1 (* 1/2 JOY-GAUGE-WIDTH) "cat"))
+(define zoo-test-2 (make-zoo VCham-test-2 VCat-test-2 JOY-MIN "cat"))
+
+;;; functions
+
+;; Zoo -> Image
+;; places the following onto CANVAS:
+;; - CHAM (colored)
+;; - CAT (animated)
+;; - JOY-GAUGE
+(check-expect (zoo->image zoo-test-0)
+              (place-images
+               (list (color-VCham (zoo-VCham zoo-test-0))
+                     (animate-VCat (zoo-VCat zoo-test-0))
+                     (joy-level-of zoo-test-0)
+                     (display-focus (zoo-focus zoo-test-0)))
+               (list (posn-of (zoo-VCham zoo-test-0))
+                     (posn-of (zoo-VCat zoo-test-0))
+                     JOY-GAUGE-POSN
+                     FOCUS-POSN)
+               CANVAS))
+
+(define (zoo->image zoo)
+  (place-images
+   (list (color-VCham (zoo-VCham zoo))
+         (animate-VCat (zoo-VCat zoo))
+         (joy-level-of zoo)
+         (display-focus (zoo-focus zoo)))
+   (list (posn-of (zoo-VCham zoo))
+         (posn-of (zoo-VCat zoo))
+         JOY-GAUGE-POSN
+         FOCUS-POSN)
+   CANVAS))
+
+;; VCham -> Image
+;; colors CHAM.
+(check-expect (color-VCham VCham-test-0)
+              (overlay/align "middle" "middle"
+                             CHAM
+                             (rectangle CHAM-WIDTH CHAM-HEIGHT
+                                        "solid" (VCham-color VCham-test-0))))
+(check-expect (color-VCham VCham-test-1)
+              (overlay/align "middle" "middle"
+                             CHAM
+                             (rectangle CHAM-WIDTH CHAM-HEIGHT
+                                        "solid" (VCham-color VCham-test-1))))
+
+(define (color-VCham cham)
+  (overlay/align "middle" "middle"
+                 CHAM
+                 (rectangle CHAM-WIDTH CHAM-HEIGHT
+                            "solid" (VCham-color cham))))
+
+;; VCat -> Image
+;; switches between the following depending on x-coordinate:
+;; - x-coordinate divisible by 2 | return CAT-0
+;; - x-coordinate indivisible by 2 | return CAT-1
+(check-expect (animate-VCat VCat-test-0) CAT-0)
+(check-expect (animate-VCat VCat-test-1) CAT-1)
+
+(define (animate-VCat cat)
+  (if (= (modulo (VCat-x-cor cat) 2) 0)
+      CAT-0
+      CAT-1))
+
+;; Zoo -> Image
+;; renders joy level of given Zoo.
+(check-expect (joy-level-of zoo-test-0)
+              (underlay/align "left" "middle"
+                              (rectangle
+                               (zoo-joy zoo-test-0)
+                               JOY-GAUGE-HEIGHT
+                               "solid" "black")
+                              JOY-GAUGE))
+(check-expect (joy-level-of (make-zoo VCham-test-0 VCat-test-0 (+ JOY-MAX 100) "cat"))
+              (underlay/align "left" "middle"
+                              (rectangle
+                               JOY-MAX
+                               JOY-GAUGE-HEIGHT
+                               "solid" "black")
+                              JOY-GAUGE))
+
+(define (joy-level-of zoo)
+  (underlay/align "left" "middle"
+                  (rectangle
+                   (if (< (zoo-joy zoo) JOY-MAX)
+                       (zoo-joy zoo)
+                       JOY-MAX)
+                   JOY-GAUGE-HEIGHT
+                   "solid" "black")
+                  JOY-GAUGE))
+
+;; Focus -> image
+;; displays Focus as an image.
+(check-expect (display-focus (zoo-focus zoo-test-0))
+              (text (zoo-focus zoo-test-0) FOCUS-FONT-SIZE FOCUS-FONT-COLOR))
+
+(define (display-focus focus)
+  (text focus FOCUS-FONT-SIZE FOCUS-FONT-COLOR))
+
+;; Zoo -> Posn
+;; computes for the Posn of given pet.
+(check-expect (posn-of VCham-test-0)
+              (make-posn (VCham-x-cor VCham-test-0) CHAM-Y))
+(check-expect (posn-of VCat-test-0)
+              (make-posn (VCat-x-cor VCat-test-0) CAT-Y))
+
+(define (posn-of pet)
+  (cond [(VCham? pet) (make-posn (VCham-x-cor pet) CHAM-Y)]
+        [(VCat? pet) (make-posn (VCat-x-cor pet) CAT-Y)]))
+
+;; Zoo -> Zoo
+;; computes for the next x-coordinate and joy level of Zoo.
+(check-expect (next-state-of zoo-test-0)
+              (make-zoo (next-VCham (zoo-VCham zoo-test-0))
+                        (next-VCat (zoo-VCat zoo-test-0))
+                        (- (zoo-joy zoo-test-0) JOY/TICK)
+                        (zoo-focus zoo-test-0)))
+
+(define (next-state-of zoo)
+  (make-zoo (next-VCham (zoo-VCham zoo))
+            (next-VCat (zoo-VCat zoo))
+            (- (zoo-joy zoo) JOY/TICK)
+            (zoo-focus zoo)))
+
+;; VCham -> VCham
+;; computes for the next x-coordinate and joy level of VCham.
+(check-expect (next-VCham VCham-test-0)
+              (make-VCham (+ (VCham-x-cor VCham-test-0) PET-VELOCITY)
+                          (VCham-color VCham-test-0)))
+(check-expect (next-VCham (make-VCham CHAM-RESET "blue"))
+              (make-VCham CHAM-X-START
+                          "blue"))
+
+(define (next-VCham vcham)
+  (make-VCham (if (not (>= (VCham-x-cor vcham) CHAM-RESET))
+                  (+ (VCham-x-cor vcham) PET-VELOCITY)
+                  CHAM-X-START)
+              (VCham-color vcham)))
+
+;; VCat -> VCat
+;; computes for the next x-coordinate and joy level of VCat.
+(check-expect (next-VCat VCat-test-0)
+              (make-VCat (+ (VCat-x-cor VCat-test-0) PET-VELOCITY)))
+(check-expect (next-VCat (make-VCat CAT-RESET))
+              (make-VCat CAT-X-START))
+
+(define (next-VCat vcat)
+  (make-VCat (if (not (>= (VCat-x-cor vcat) CAT-RESET))
+                 (+ (VCat-x-cor vcat) PET-VELOCITY)
+                 CAT-X-START)))
+
+;; Zoo KeyEvent -> Zoo
+;; changes Zoo in the following ways:
+;; - "k" | makes the cat the focus animal
+;; - "l" | makes the chameleon the focus animal
+;; - "down" | feeds either the cat or the lizard
+;; - "r" | changes the color of the lizard to red
+;; - "g" | changes the color of the lizard to green
+;; - "b" | changes the color of the lizard to blue
+(check-expect (zoo-controller zoo-test-1 "l") (change-focus-of zoo-test-1 "l"))
+(check-expect (zoo-controller zoo-test-0 "r") (change-color-of-VCham zoo-test-0 "r"))
+(check-expect (zoo-controller zoo-test-0 "g") (change-color-of-VCham zoo-test-0 "g"))
+(check-expect (zoo-controller zoo-test-0 "b") (change-color-of-VCham zoo-test-0 "b"))
+(check-expect (zoo-controller zoo-test-1 "l") (change-focus-of zoo-test-1 "l"))
+(check-expect (zoo-controller zoo-test-1 "up") (annoy-VCat zoo-test-1))
+(check-expect (zoo-controller zoo-test-1 "down") (raise-joy-of zoo-test-1))
+(check-expect (zoo-controller zoo-test-1 " ") zoo-test-1)
+
+(define (zoo-controller zoo key-event)
+  (cond [(key=? key-event "down")
+         (raise-joy-of zoo)]
+        [(or (key=? key-event "r")
+             (key=? key-event "g")
+             (key=? key-event "b"))
+         (if (string=? (zoo-focus zoo) "cham")
+             (change-color-of-VCham zoo key-event)
+             zoo)]
+        [(key=? key-event "up")
+         (if (string=? (zoo-focus zoo) "cat")
+             (annoy-VCat zoo)
+             zoo)]
+        [(or (key=? key-event "l")
+             (key=? key-event "k"))
+         (change-focus-of zoo key-event)]
+        [else zoo]))
+
+;; Zoo KeyEvent -> Zoo
+;; changes color of chameleon.
+(check-expect (change-color-of-VCham zoo-test-1 "r")
+              (make-zoo (make-VCham (VCham-x-cor (zoo-VCham zoo-test-1))
+                                    "red")
+                        (zoo-VCat zoo-test-1) (zoo-joy zoo-test-1) (zoo-focus zoo-test-1)))
+(check-expect (change-color-of-VCham zoo-test-1 "g")
+              (make-zoo (make-VCham (VCham-x-cor (zoo-VCham zoo-test-1))
+                                    "green")
+                        (zoo-VCat zoo-test-1) (zoo-joy zoo-test-1) (zoo-focus zoo-test-1)))
+(check-expect (change-color-of-VCham zoo-test-1 "b")
+              (make-zoo (make-VCham (VCham-x-cor (zoo-VCham zoo-test-1))
+                                    "blue")
+                        (zoo-VCat zoo-test-1) (zoo-joy zoo-test-1) (zoo-focus zoo-test-1)))
+
+(define (change-color-of-VCham zoo key-event)
+  (make-zoo (make-VCham (VCham-x-cor (zoo-VCham zoo))
+                        (cond [(key=? key-event "r") "red"]
+                              [(key=? key-event "g") "green"]
+                              [(key=? key-event "b") "blue"]))
+            (zoo-VCat zoo) (zoo-joy zoo) (zoo-focus zoo)))
+
+;; Zoo KeyEvent -> Zoo
+;; turns focus animal from "cham" to "cat" and vice versa.
+(check-expect (change-focus-of zoo-test-0 "l")
+              (make-zoo (zoo-VCham zoo-test-0) (zoo-VCat zoo-test-0) (zoo-joy zoo-test-0)
+                        "cham"))
+(check-expect (change-focus-of zoo-test-1 "k")
+              (make-zoo (zoo-VCham zoo-test-1) (zoo-VCat zoo-test-1) (zoo-joy zoo-test-1)
+                        "cat"))
+
+(define (change-focus-of zoo key-event)
+  (make-zoo (zoo-VCham zoo) (zoo-VCat zoo) (zoo-joy zoo)
+            (cond [(key=? key-event "l") "cham"]
+                  [(key=? key-event "k") "cat"])))
+
+;; Zoo -> Zoo
+;; raises joy level of Zoo by JOY/DOWN
+(check-expect (raise-joy-of zoo-test-0)
+              (make-zoo (zoo-VCham zoo-test-0) (zoo-VCat zoo-test-0)
+                        (+ (zoo-joy zoo-test-0) JOY/DOWN)
+                        (zoo-focus zoo-test-0)))
+
+(define (raise-joy-of zoo)
+  (make-zoo (zoo-VCham zoo) (zoo-VCat zoo)
+            (+ (zoo-joy zoo) JOY/DOWN)
+            (zoo-focus zoo)))
+
+;; Zoo -> Zoo
+;; decreases joy level of Zoo by JOY/UP.
+(check-expect (annoy-VCat zoo-test-1)
+              (make-zoo (zoo-VCham zoo-test-1)
+                        (make-VCat (- (VCat-x-cor (zoo-VCat zoo-test-1)) PET-VELOCITY))
+                        (zoo-joy zoo-test-1) (zoo-focus zoo-test-1)))
+
+(define (annoy-VCat zoo)
+  (make-zoo (zoo-VCham zoo)
+            (make-VCat (- (VCat-x-cor (zoo-VCat zoo)) PET-VELOCITY))
+            (zoo-joy zoo) (zoo-focus zoo)))
+
+;; Zoo -> Boolean
+;; stops program when the joy level of Zoo reaches JOY-MIN.
+(check-expect (fed-up? zoo-test-0) #f)
+(check-expect (fed-up? zoo-test-2) #t)
+(check-expect (fed-up? zoo-test-0) #f)
+(check-expect (fed-up? zoo-test-2) #t)
+
+(define (fed-up? zoo)
+  (<= (zoo-joy zoo) JOY-MIN))
+
+;; VAnimal -> VAnimal
+;; main function.
+(define (cham-and-cat animal)
+  (big-bang animal
+            [to-draw zoo->image]
+            [on-tick next-state-of]
+            [on-key zoo-controller]
+            [stop-when fed-up?]))
+
+(cham-and-cat zoo-test-0)
+(test)

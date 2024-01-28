@@ -1,0 +1,4 @@
+;; sample problem: design a program that simulates the descent of a UFO.
+
+(#lang htdp/bsl)
+()

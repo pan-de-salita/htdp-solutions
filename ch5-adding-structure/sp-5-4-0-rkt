@@ -1,0 +1,80 @@
+#lang racket
+(require test-engine/racket-tests)
+(require 2htdp/image)
+(require 2htdp/universe)
+(require lang/posn)
+
+(define BACKGROUND-WIDTH 100)
+(define BACKGROUND-HEIGHT 200)
+(define RADIUS (/ BACKGROUND-HEIGHT 20))
+(define BACKGROUND-LOWER-EDGE (- BACKGROUND-HEIGHT RADIUS))
+(define BACKGROUND-UPPER-EDGE (+ 0 RADIUS))
+(define MOVE-DOWN 3)
+(define MOVE-UP -3)
+
+(define BACKGROUND (empty-scene BACKGROUND-WIDTH BACKGROUND-HEIGHT "black"))
+(define BALL (circle RADIUS "solid" "red"))
+(define BALL-INITIAL-POSN (make-posn (/ BACKGROUND-WIDTH 2) BACKGROUND-UPPER-EDGE))
+
+(define-struct ball-movement [location velocity])
+;; a BallMovement is a structure:
+;;  (make-ball-movement Number Number)
+;; interpretation:
+;; - location | number of pixels between BALL center and top of BACKGROUND
+;; - velocity | direction (positive moves BALL upward; negative moves BAll downward) + SPEED
+
+;; BallMovement -> Image
+;; renders the image of BALL according to given BallMovement
+(check-expect (ball-movement-render (make-ball-movement 10 MOVE-UP))
+              (place-image BALL
+                           (posn-x BALL-INITIAL-POSN)
+                           (ball-movement-location (make-ball-movement 10 MOVE-UP))
+                           BACKGROUND))
+(check-expect (ball-movement-render (make-ball-movement 145 MOVE-DOWN))
+              (place-image BALL
+                           (posn-x BALL-INITIAL-POSN)
+                           (ball-movement-location (make-ball-movement 145 MOVE-DOWN))
+                           BACKGROUND))
+
+(define (ball-movement-render ball-movement)
+  (place-image BALL
+               (posn-x BALL-INITIAL-POSN)
+               (ball-movement-location ball-movement)
+               BACKGROUND))
+
+;; BallMovement -> BallMovement
+;; changes location of BALL each clock tick
+(check-expect (ball-movement-per-tick (make-ball-movement BACKGROUND-HEIGHT MOVE-DOWN))
+              (make-ball-movement (+ BACKGROUND-HEIGHT MOVE-DOWN) MOVE-UP))
+(check-expect (ball-movement-per-tick (make-ball-movement 44 MOVE-UP))
+              (make-ball-movement (+ 44 MOVE-UP) MOVE-UP))
+(check-expect (ball-movement-per-tick (make-ball-movement 0 MOVE-UP))
+              (make-ball-movement (+ 0 MOVE-UP) MOVE-DOWN))
+
+(define (ball-movement-per-tick ball-movement)
+  (make-ball-movement (+ (ball-movement-location ball-movement)
+                         (ball-movement-velocity ball-movement))
+                      (ball-movement-direction ball-movement)))
+
+;; BallMovement -> Number
+;; changes direction of BALL according to BALL's location
+;; - if BALL's about to go beyond BACKGROUND-LOWER-EDGE, BALL begins to move up
+;; - if BALL's about to go beyond BACKGROUND-UPPER-EDGE, BALL begins to move down
+;; - else, BALL's direction remains unchanged
+(check-expect (ball-movement-direction (make-ball-movement BACKGROUND-HEIGHT MOVE-DOWN)) MOVE-UP)
+(check-expect (ball-movement-direction (make-ball-movement 44 MOVE-UP)) MOVE-UP)
+(check-expect (ball-movement-direction (make-ball-movement 0 MOVE-UP)) MOVE-DOWN)
+
+(define (ball-movement-direction ball-movement)
+  (cond [(>= (ball-movement-location ball-movement) BACKGROUND-LOWER-EDGE) MOVE-UP]
+        [(<= (ball-movement-location ball-movement) BACKGROUND-UPPER-EDGE) MOVE-DOWN]
+        [else (ball-movement-velocity ball-movement)]))
+
+;; BallMovement -> BallMovement
+(define (bouncing-ball ball-movement)
+  (big-bang ball-movement
+            [to-draw ball-movement-render]
+            [on-tick ball-movement-per-tick]))
+
+(test)
+(bouncing-ball (make-ball-movement (posn-y BALL-INITIAL-POSN) MOVE-DOWN))

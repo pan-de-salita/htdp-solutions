@@ -1,0 +1,7 @@
+#lang racket
+(require 2htdp/universe)
+(require 2htdp/image)
+(require test-engine/racket-tests)
+
+;; Constant definitions
+(define CAT file:///home/objekt0riented/Pictures/ollie.png)

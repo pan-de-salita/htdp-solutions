@@ -1,0 +1,157 @@
+#lang racket
+(require test-engine/racket-tests)
+(require 2htdp/batch-io)
+
+;;; data definitions
+
+;; a Word is one of:
+;; - '()
+;; - (cons 1String Word)
+;; i.e. a Word is a list of 1Strings (letters)
+;; examples:
+(define WORD-EXAMPLE-0 '())
+(define WORD-EXAMPLE-1 (list "c" "a" "t"))
+(define WORD-EXAMPLE-2 (list "a" "c" "t"))
+(define WORD-EXAMPLE-3 (list "t" "a" "c"))
+(define WORD-EXAMPLE-4 (list "r" "a" "t"))
+(define WORD-EXAMPLE-5 (list "t" "a" "r"))
+(define WORD-EXAMPLE-6 (list "a" "r" "t"))
+(define WORD-EXAMPLE-7 (list "t" "r" "a"))
+
+;; a List-of-Words is one of:
+;; - (cons Word '())
+;; - (cons Word List-of-Words)
+;; i.e. a list of Words.
+;; examples:
+(define LIST-OF-WORDS-EXAMPLE-0
+  (list WORD-EXAMPLE-0))
+(define LIST-OF-WORDS-EXAMPLE-1
+  (list WORD-EXAMPLE-1
+        WORD-EXAMPLE-2))
+(define LIST-OF-WORDS-EXAMPLE-2
+  (list WORD-EXAMPLE-1
+        WORD-EXAMPLE-2
+        WORD-EXAMPLE-3))
+(define LIST-OF-WORDS-EXAMPLE-3
+  (list WORD-EXAMPLE-4
+        WORD-EXAMPLE-5
+        WORD-EXAMPLE-6))
+(define LIST-OF-WORDS-EXAMPLE-4
+  (list WORD-EXAMPLE-4
+        WORD-EXAMPLE-5
+        WORD-EXAMPLE-6
+        WORD-EXAMPLE-7))
+
+;;; constants
+
+(define DICTIONARY-LOCATION "/usr/share/dict/words")
+(define DICTIONARY-AS-LIST (read-lines DICTIONARY-LOCATION))
+
+;;; functions
+
+;; String -> List-of-Strings
+;; finds all words that use the same letters as s.
+
+;; (check-satisfied (alternative-words "cat") all-words-from-cat?)
+;; (check-satisfied (alternative-words "rat") all-words-from-rat?)
+
+;; (define (alternative-words a-string)
+;;   (in-dictionary (words->strings (arrangements (string->word a-string)))))
+
+;; Word -> List-of-Words
+;; returns all rearrangements of the letters in a Word.
+
+;; (check-expect (arrangements '()) (list '()))
+;; (check-expect
+;;  (arrangements (list "c" "a" "t"))
+;;  (list (list "c" "a" "t")
+;;        (list "t" "c" "a")
+;;        (list "a" "t" "c")
+;;        (list "c" "t" "a")
+;;        (list "a" "c" "t")
+;;        (list "t" "a" "c")))
+;; (check-expect
+;;  (arrangements (list "e" "e" "l"))
+;;  (list (list "e" "e" "l") (list "l" "e" "e") (list "e" "l" "e")))
+;; (check-expect
+;;  (arrangements (list "l" "a" "n" "g"))
+;;  (list (list "l" "a" "n" "g")
+;;        (list "g" "l" "a" "n")
+;;        (list "n" "g" "l" "a")
+;;        (list "a" "n" "g" "l")
+;;        (list "l" "g" "a" "n")
+;;        (list "n" "l" "g" "a")
+;;        (list "a" "n" "l" "g")
+;;        (list "g" "a" "n" "l")
+;;        (list "l" "n" "g" "a")
+;;        (list "a" "l" "n" "g")
+;;        (list "g" "a" "l" "n")
+;;        (list "n" "g" "a" "l")
+;;        (list "l" "a" "g" "n")
+;;        (list "n" "l" "a" "g")
+;;        (list "g" "n" "l" "a")
+;;        (list "a" "g" "n" "l")
+;;        (list "l" "n" "a" "g")
+;;        (list "g" "l" "n" "a")
+;;        (list "a" "g" "l" "n")
+;;        (list "n" "a" "g" "l")
+;;        (list "l" "g" "n" "a")
+;;        (list "a" "l" "g" "n")
+;;        (list "n" "a" "l" "g")
+;;        (list "g" "n" "a" "l")))
+
+(define (arrangements a-word)
+  (if (empty? a-word)
+      (list '())
+      (insert-everywhere/in-all-words (first a-word) (arrangements (rest a-word)))))
+
+;; 1String List-of-Words -> List-of-Words
+;; inserts a letter into all Words at every position in a List-of-Words.
+
+;; (check-expect (insert-everywhere/in-all-words "c" (list '()))
+;;               (list (list "c")))
+;; (check-expect (insert-everywhere/in-all-words "c" (list (list "a")))
+;;               (list (list "c" "a") (list "a" "c")))
+;; (check-expect (insert-everywhere/in-all-words "c" (list (list "a" "t")))
+;;               (list (list "c" "a" "t")
+;;                     (list "t" "c" "a")
+;;                     (list "a" "t" "c")))
+;; (check-satisfied
+;;  (insert-everywhere/in-all-words "c" (list (list "a" "t") (list "t" "a")))
+;;  all-words-of-cat?)
+
+(define (insert-everywhere/in-all-words a-letter a-list-of-words)
+  (if (empty? a-list-of-words)
+      '()
+      (append (insert-everywhere/in-one-word a-letter (first a-list-of-words) a-letter)
+              (insert-everywhere/in-all-words a-letter (rest a-list-of-words)))))
+
+;; 1String Word -> List-of-Words
+;; inserts a letter into a Word at every position.
+
+;; (check-expect (insert-everywhere/in-one-word "c" '()) (list (list "c")))
+;; (check-expect (insert-everywhere/in-one-word "c" (list "a"))
+;;               (list (list "c" "a")
+;;                     (list "a" "c")))
+;; (check-expect (insert-everywhere/in-one-word "c" (list "a" "t"))
+;;               (list (list "c" "a" "t")
+;;                     (list "t" "c" "a")
+;;                     (list "a" "t" "c")))
+
+(define (insert-everywhere/in-one-word a-letter a-word)
+  (if (empty? a-word)
+      (list (list a-letter))
+      (insert a-letter a-word)))
+
+;; 1String Word -> List-of-Words
+;; inserts a letter into a Word at every position.
+
+(define (insert a-letter a-word)
+  (if (empty? word-2)
+      (list word-1 a-letter)
+      (cons (list a-letter a-word)
+            (insert (second a-word) (list a-letter (first a-word))))))
+
+;;; application
+
+(test)

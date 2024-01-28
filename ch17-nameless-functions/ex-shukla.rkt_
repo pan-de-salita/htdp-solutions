@@ -1,0 +1,62 @@
+#lang racket
+(require test-engine/racket-tests)
+
+;; [X] [list-of X] [X X -> Boolean] -> [List-of X]
+;; sorts l according to cmp
+
+(check-expect (sort-cmp '("c" "b") string<?) '("b" "c"))
+(check-expect (sort-cmp '(2 1 3 4 6 5) <) '(1 2 3 4 5 6))
+
+(define (sort-cmp l cmp)
+  (cond [(empty? l) '()]
+        [else (cond [(or (empty? (sort-cmp (cdr l) cmp))
+                         (cmp (car l) (car (sort-cmp (cdr l) cmp))))
+                     (cons (car l) (sort-cmp (cdr l) cmp))]
+                    [else (sort-cmp (append (cdr l) (list (car l))) cmp)])]))
+
+;; [X] [List-of X] [X X -> Boolean] -> [[List-of X] -> Boolean]
+;; checks the following:
+;; - is l-test sorted according to cmp?
+;; - are all items in l-test members of l-ref?
+
+(check-expect [(sorted '(2 1 3 4 6 5) <) (sort-cmp '(2 1 3 4 6 5) <)] #t)
+(check-expect [(sorted '(1 1 2 4 1 3 3 4 6 5 5) <) '(1 1 1 2 3 3 4 4 5 5 6)] #t)
+
+(define a-list
+  (build-list 500 (lambda (x) (random 500))))
+(define a-list-sorted/ascending
+  (sort-cmp a-list <=))
+(check-satisfied a-list-sorted/ascending (sorted a-list <))
+
+(define (sorted l-ref cmp)
+  (lambda (l-test)
+    (local (;; [List-of X] -> [List-of X]
+            ;; removes all duplicate items from l
+            (define (remove-duplicates-own l)
+              (foldr (lambda (from-l l-occurring)
+                       (cons from-l
+                             (filter (lambda (from-l-occurring)
+                                       (not (equal? from-l from-l-occurring)))
+                                     l-occurring)))
+                     '()
+                     l))
+            ;; [List-of X] -> Boolean
+            ;; checks if a list is sorted according to cmp
+            (define (sorted? l)
+              (cond [(or (empty? l) (empty? (cdr l))) #t]
+                    [else (and (cmp (car l) (cadr l))
+                               (sorted? (cdr l)))]))
+            ;; [List-of X] [List-of X] -> Boolean
+            ;; checks if all items on l-x are members of l-y
+            (define (contains? l-x l-y)
+              (andmap (lambda (from-l-x)
+                        (not (boolean? (member from-l-x l-y))))
+                      l-x)))
+      (cond [(empty? l-test) #t]
+            [else (and (sorted? (remove-duplicates-own l-test))
+                       (contains? (remove-duplicates-own l-test)
+                                  (remove-duplicates-own l-ref))
+                       (contains? (remove-duplicates-own l-ref)
+                                  (remove-duplicates-own l-test)))]))))
+
+(test)
